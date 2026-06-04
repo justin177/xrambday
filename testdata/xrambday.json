@@ -1,0 +1,67 @@
+{
+  "log": {
+    "loglevel": "error"
+  },
+  "reverse": {
+    "bridges": [
+      {
+        "tag": "xrambday-bridge",
+        "domain": "xrambday.reverse.internal"
+      }
+    ]
+  },
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "domain": [
+          "full:xrambday.reverse.internal"
+        ],
+        "outboundTag": "xrambday-reverse"
+      },
+      {
+        "type": "field",
+        "inboundTag": [
+          "xrambday-bridge"
+        ],
+        "outboundTag": "xrambday-freedom"
+      }
+    ]
+  },
+  "outbounds": [
+    {
+      "tag": "xrambday-reverse",
+      "protocol": "vmess",
+      "settings": {
+        "vnext": [
+          {
+            "address": "upstream.example.com",
+            "port": 443,
+            "users": [
+              {
+                "id": "93a43dc8-ab64-4310-a93a-fa93556e5071",
+                "alterId": 0,
+                "security": "auto"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "ws",
+        "security": "tls",
+        "tlsSettings": {
+          "allowInsecure": true
+        },
+        "wsSettings": {
+          "path": "/xrambday-reverse"
+        }
+      }
+    },
+    {
+      "tag": "xrambday-freedom",
+      "protocol": "freedom",
+      "settings": {}
+    }
+  ]
+}

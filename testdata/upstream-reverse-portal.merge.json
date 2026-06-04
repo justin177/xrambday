@@ -1,0 +1,57 @@
+{
+  "reverse": {
+    "portals": [
+      {
+        "tag": "xrambday-portal",
+        "domain": "xrambday.reverse.internal"
+      }
+    ]
+  },
+  "inbounds": [
+    {
+      "tag": "xrambday-reverse-in",
+      "listen": "127.0.0.1",
+      "port": 10086,
+      "protocol": "vmess",
+      "settings": {
+        "clients": [
+          {
+            "id": "93a43dc8-ab64-4310-a93a-fa93556e5071",
+            "alterId": 0
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "ws",
+        "security": "none",
+        "wsSettings": {
+          "path": "/xrambday-reverse"
+        }
+      }
+    }
+  ],
+  "fallbacks": [
+    {
+      "path": "/xrambday-reverse",
+      "dest": 10086
+    }
+  ],
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "ip": [
+          "geoip:cloudflare"
+        ],
+        "outboundTag": "xrambday-portal"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "full:xrambday.reverse.internal"
+        ],
+        "outboundTag": "xrambday-portal"
+      }
+    ]
+  }
+}
