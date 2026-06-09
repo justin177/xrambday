@@ -16,7 +16,7 @@ import (
 func TestRPCInvokeClient(t *testing.T) {
 	port := os.Getenv("_LAMBDA_SERVER_PORT")
 	if port == "" {
-		port = "8888"
+		t.Skip("_LAMBDA_SERVER_PORT is not set; skipping external Lambda RPC test")
 	}
 
 	client, err := rpc.Dial("tcp", "localhost:"+port)
@@ -64,7 +64,7 @@ func TestRPCInvokeClient(t *testing.T) {
 func TestRPCPortIsNumeric(t *testing.T) {
 	port := os.Getenv("_LAMBDA_SERVER_PORT")
 	if port == "" {
-		port = "8888"
+		t.Skip("_LAMBDA_SERVER_PORT is not set; skipping external Lambda RPC test")
 	}
 	if _, err := strconv.Atoi(port); err != nil {
 		t.Fatalf("_LAMBDA_SERVER_PORT must be numeric: %q", port)

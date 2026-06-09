@@ -26,15 +26,17 @@ Use `--platform linux/arm64` for ARM Lambda functions.
 ## Configure Lambda
 
 Create the Lambda from this container image and enable a Function URL.
-Set `CONFIG` to the Xray config path, matching the `render` project behavior.
+Set `CONFIG` to an HTTPS URL that returns the Xray JSON config, an inline JSON
+config, or a local config path, matching the `render` project behavior. If
+`CONFIG` is not set, the binary uses the compiled-in `testdata/xrambday.json`.
+If the runtime image cannot validate the HTTPS certificate chain, set
+`CONFIG_TLS_INSECURE=1` to fetch the config without TLS certificate validation.
 
 The Lambda timeout should be longer than 840 seconds. For a 900 second timeout,
 the 840 second activation window leaves 60 seconds for cleanup.
 
-If `CONFIG` is not set, the binary falls back to `config.json` in the current
-working directory, then to stdin, matching the local run behavior. The sample
-Lambda config lives at `testdata/xrambday.json`; deployment ZIPs only contain the
-`bootstrap` binary.
+The sample Lambda config lives at `testdata/xrambday.json`; deployment ZIPs only
+contain the `bootstrap` binary and its embedded copy of that config.
 
 ## Local test
 
@@ -54,13 +56,4 @@ Expected response:
 
 ```text
 activation window ended, xray stopped
-```
-
-## Upstream merge
-
-The upstream reverse portal merge fragment and helper script are under
-`testdata/`:
-
-```sh
-testdata/merge-upstream-reverse.sh upstream.json
 ```

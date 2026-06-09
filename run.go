@@ -1,128 +1,89 @@
 package main
 
 import (
+	"bytes"
+	"crypto/tls"
+	_ "embed"
+	"io"
 	"log"
+	"net/http"
 	"os"
-	"path"
-	"path/filepath"
-	"regexp"
 	"strings"
+	"time"
 
-	"github.com/xtls/xray-core/common/cmdarg"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/core"
 )
 
-var (
-	configFiles cmdarg.Arg
-	configDir   string
-	format      = "auto"
+//go:embed testdata/xrambday.json
+var embeddedConfig []byte
 
-	_ = func() bool {
-		if v, ok := os.LookupEnv("CONFIG"); ok && len(v) > 0 {
-			configFiles.Set(v)
-		}
-		return true
-	}()
-)
-
-func fileExists(file string) bool {
-	info, err := os.Stat(file)
-	return err == nil && !info.IsDir()
+func isHTTPSConfigSource(source string) bool {
+	return strings.HasPrefix(strings.ToLower(source), "https://")
 }
 
-func dirExists(file string) bool {
-	if file == "" {
+func fetchHTTPSConfig(source string) ([]byte, error) {
+	client := &http.Client{Timeout: 30 * time.Second}
+	if isTruthyEnv("CONFIG_TLS_INSECURE") {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+	resp, err := client.Get(source)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, errors.New("unexpected HTTP status: ", resp.Status)
+	}
+	return io.ReadAll(resp.Body)
+}
+
+func isTruthyEnv(name string) bool {
+	switch strings.ToLower(os.Getenv(name)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
 		return false
 	}
-	info, err := os.Stat(file)
-	return err == nil && info.IsDir()
-}
-
-func getRegepxByFormat() string {
-	switch strings.ToLower(format) {
-	case "json":
-		return `^.+\.(json|jsonc)$`
-	case "toml":
-		return `^.+\.toml$`
-	case "yaml", "yml":
-		return `^.+\.(yaml|yml)$`
-	default:
-		return `^.+\.(json|jsonc|toml|yaml|yml)$`
-	}
-}
-
-func readConfDir(dirPath string) {
-	confs, err := os.ReadDir(dirPath)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	for _, f := range confs {
-		matched, err := regexp.MatchString(getRegepxByFormat(), f.Name())
-		if err != nil {
-			log.Fatalln(err)
-		}
-		if matched {
-			configFiles.Set(path.Join(dirPath, f.Name()))
-		}
-	}
-}
-
-func getConfigFilePath(verbose bool) cmdarg.Arg {
-	if dirExists(configDir) {
-		if verbose {
-			log.Println("Using confdir from arg:", configDir)
-		}
-		readConfDir(configDir)
-	} else if envConfDir := platform.GetConfDirPath(); dirExists(envConfDir) {
-		if verbose {
-			log.Println("Using confdir from env:", envConfDir)
-		}
-		readConfDir(envConfDir)
-	}
-
-	if len(configFiles) > 0 {
-		return configFiles
-	}
-
-	if workingDir, err := os.Getwd(); err == nil {
-		configFile := filepath.Join(workingDir, "config.json")
-		if fileExists(configFile) {
-			if verbose {
-				log.Println("Using default config: ", configFile)
-			}
-			return cmdarg.Arg{configFile}
-		}
-	}
-
-	if configFile := platform.GetConfigurationPath(); fileExists(configFile) {
-		if verbose {
-			log.Println("Using config from env: ", configFile)
-		}
-		return cmdarg.Arg{configFile}
-	}
-
-	if verbose {
-		log.Println("Using config from STDIN")
-	}
-	return cmdarg.Arg{"stdin:"}
-}
-
-func getConfigFormat() string {
-	f := core.GetFormatByExtension(format)
-	if f == "" {
-		f = "auto"
-	}
-	return f
 }
 
 func startXray() (core.Server, error) {
-	configFiles := getConfigFilePath(true)
+	configSource := os.Getenv("CONFIG")
+	if configSource == "" {
+		log.Println("Using embedded config")
+		return newXrayServer(embeddedConfig, "embedded")
+	}
+	log.Println("Using config from CONFIG")
 
-	c, err := core.LoadConfig(getConfigFormat(), configFiles)
+	var configBytes []byte
+	var err error
+	if isHTTPSConfigSource(configSource) {
+		configBytes, err = fetchHTTPSConfig(configSource)
+		if err != nil {
+			return nil, errors.New("failed to fetch remote config from CONFIG").Base(err)
+		}
+	} else if isJSONConfigSource(configSource) {
+		configBytes = []byte(configSource)
+	} else {
+		configBytes, err = os.ReadFile(configSource)
+		if err != nil {
+			return nil, errors.New("failed to read config from CONFIG").Base(err)
+		}
+	}
+	return newXrayServer(configBytes, "CONFIG")
+}
+
+func isJSONConfigSource(source string) bool {
+	return strings.HasPrefix(strings.TrimSpace(source), "{")
+}
+
+func newXrayServer(configBytes []byte, sourceLabel string) (core.Server, error) {
+	c, err := core.LoadConfig("json", bytes.NewReader(configBytes))
 	if err != nil {
-		return nil, errors.New("failed to load config files: [", configFiles.String(), "]").Base(err)
+		return nil, errors.New("failed to load config from ", sourceLabel).Base(err)
 	}
 
 	server, err := core.New(c)
